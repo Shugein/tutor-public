@@ -18,7 +18,7 @@ from typing import Annotated, Any
 
 import httpx
 
-from tutor_public.mcp_tools import create_mcp_server, tool
+from tutor.mcp_tools import create_mcp_server, tool
 SERVER_NAME = "transcript"
 TOOL_NAMES = [f"mcp__{SERVER_NAME}__{name}"
               for name in ("fetch_page", "fetch_subtitles")]

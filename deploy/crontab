@@ -1,0 +1,23 @@
+# Расписание петель (supercronic, TZ=Europe/Belgrade из образа).
+# Пути абсолютные: PATH в образе включает /app/.venv/bin, WORKDIR=/app.
+# Слоты продублированы в config.py (TutorConfig.slots) — по ним healthcheck
+# понимает, что петля пропустила свой слот. Правишь здесь — правь и там.
+
+0 8 * * *      python -m tutor.loop --tutor interview --loop morning
+0 20 * * *     python -m tutor.loop --tutor interview --loop evening
+# 2 раза в день, а не каждые 2 часа (2026-08-15): что открыто и чем это закрыть —
+# строка в утреннем уроке, а не задача напоминалки; ей остались только реальные
+# сроки, а их единицы. 12:00 — до дневного окна, 18:00 — до вечерней петли.
+0 12,18 * * *  python -m tutor.loop --tutor interview --loop deadlines
+*/10 * * * *   python scripts/healthcheck.py
+
+0 18 * * 0     python -m tutor.loop --tutor interview --loop weekly
+30 18 * * 0    python -m tutor.loop --tutor english --loop weekly
+0 19 * * 0     python -m tutor.loop --tutor interview --loop review
+
+30 7 * * *     python -m tutor.loop --tutor english --loop morning
+30 20 * * *    python -m tutor.loop --tutor english --loop evening
+
+# Ротация памяти: до утренних петель, когда сессий заведомо нет. Не петля —
+# механическая уборка без модели (см. scripts/rotate_progress.py).
+0 6 * * *      python scripts/rotate_progress.py

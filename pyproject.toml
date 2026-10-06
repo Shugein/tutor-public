@@ -1,18 +1,40 @@
 [project]
-name = "tutor-public"
+name = "tutor"
 version = "0.1.0"
-description = "Public transcript MCP slice of a personal AI tutor"
+description = "Personal AI tutor with Telegram, scheduled learning loops, Codex runtime, and MCP tools"
+authors = [
+    { name = "Shugein", email = "kowynew.serg@gmail.com" }
+]
 requires-python = ">=3.11"
 dependencies = [
-    "anyio>=4.0,<5.0",
-    "httpx>=0.28,<1.0",
-    "mcp>=1.28,<2.0",
+    "fsrs>=6.3.2",
+    "google-api-python-client>=2.198.0",
+    "google-auth-oauthlib>=1.4.0",
+    "httpx>=0.28.1",
+    "kokoro-onnx>=0.5.0",
+    "markdown>=3.10.3",
+    "mcp>=1.28.1,<2.0.0",
+    "openinference-semantic-conventions>=0.1.30",
+    "openai-codex==0.147.0",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.43.0",
+    "opentelemetry-sdk>=1.43.0",
+    "pydantic-settings>=2.14.2",
+    "pypdf>=6.15.0",
+    "python-telegram-bot>=22.8",
+    "soundfile>=0.14.0",
+    "telegramify-markdown>=1.2.0",
+    "weasyprint>=69.0",
     "yt-dlp>=2026.7.4",
 ]
 
-[project.scripts]
-tutor-subtitles-mcp = "tutor_public.server:main"
-
 [build-system]
-requires = ["uv_build>=0.12.0,<0.13.0"]
+requires = ["uv_build>=0.11.21,<0.12.0"]
 build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["scripts"]  # healthcheck.py — не пакет, но тестируется

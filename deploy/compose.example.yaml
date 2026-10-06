@@ -1,0 +1,60 @@
+# Боевой запуск: docker compose -f deploy/compose.yaml up -d
+# Один образ; состояние (tutors/, logs/, секреты) — на хосте.
+# Бот на тьютора: у каждого свой токен и свой polling (внутри процесса
+# тьюторов не разводим — PTB держит polling на приложение).
+#
+# network_mode: host — внешние сервисы доступны через локальный proxy host;
+# из bridge-сети localhost хоста не виден. Proxy-переменные интерполируются из
+# окружения на момент `docker compose up`.
+
+x-tutor: &tutor
+  image: tutor:latest
+  restart: "no"
+  network_mode: host
+  user: "1000:1000"          # файлы в volume'ах — от пользователя хоста, не root
+  environment: &tutor-env
+    HOME: /tmp               # Codex CLI пишет runtime state в home
+    # Отдельный product home: без global persona, developer AGENTS, skills и memory.
+    CODEX_HOME: /var/lib/tutor-codex
+    HTTP_PROXY: ${HTTP_PROXY:-}
+    HTTPS_PROXY: ${HTTPS_PROXY:-}
+    NO_PROXY: localhost,127.0.0.1
+  volumes:
+    - ../tutors:/app/tutors
+    - ../logs:/app/logs
+    - ../.env:/app/.env:ro
+    - ../token.json:/app/token.json   # rw: refresh перезаписывает токен
+    - ${TUTOR_CODEX_HOME:?Set a separate Codex home path}:/var/lib/tutor-codex
+
+services:
+  bot-interview:
+    <<: *tutor
+    build:                     # единственный сервис со сборкой — образ общий
+      context: ..
+      dockerfile: deploy/Dockerfile
+    command: ["python", "-m", "tutor.bot", "--tutor", "interview"]
+
+  bot-english:
+    <<: *tutor
+    command: ["python", "-m", "tutor.bot", "--tutor", "english"]
+
+  cards:
+    <<: *tutor                 # карточный бот SRS: один на проект, без LLM
+    command: ["python", "-m", "tutor.cards_bot"]
+
+  scheduler:
+    <<: *tutor
+    # путь абсолютный: PID-1-режим supercronic переисполняет argv[0], без слэша падает
+    command: ["/usr/local/bin/supercronic", "-passthrough-logs", "/app/deploy/crontab"]
+
+  phoenix:
+    image: arizephoenix/phoenix:version-12.9
+    restart: "no"
+    network_mode: host          # UI 6006, OTLP gRPC 4317 — на localhost хоста
+    environment:
+      PHOENIX_WORKING_DIR: /mnt/data
+    volumes:
+      - phoenix_data:/mnt/data  # sqlite с трейсами переживает пересоздание
+
+volumes:
+  phoenix_data:

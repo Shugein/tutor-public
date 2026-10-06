@@ -1,69 +1,98 @@
-# Tutor: subtitle MCP for English content
+# Tutor: a personal AI learning agent
 
-This is a **public code slice** of my personal AI tutor. The full private
-application runs two Telegram study flows, uses Codex SDK/App Server for agent
-sessions, stores learning state in Markdown, schedules practice loops, and
-tracks spaced repetition with FSRS/SQLite. This repository publishes the
-transcript MCP server and a generic English-content [episode workflow](prompts/episode.md).
-It contains no learner history, credentials, bot tokens, or private deployment
-configuration.
+Tutor runs two Telegram study agents, one for ML/AI interviews and one for
+English. The agents keep durable learning state in Markdown, run scheduled
+teaching and review loops, use MCP tools for external work, and trace sessions
+for diagnosis. The model runtime is the Python Codex SDK with a local App
+Server under the user's own ChatGPT subscription.
 
-## Why this piece matters
+This is the **public agent source**, including the runtime, harness, Telegram
+adapters, prompts, MCP implementations, SRS, TTS, and a Docker example. Learner
+history, messages, credentials, paid materials, and production state are not
+included. Generic templates let a reader create their own local state.
 
-An English learner can send a video before watching it. The tutor obtains the
-actual subtitle track, selects a short set of useful expressions, and prepares
-them for recognition during the video. The workflow has a hard gate: **no
-verified transcript, no vocabulary list**. That prevents a plausible-looking
-list based on the model's memory of a show instead of the episode being watched.
+## Architecture
 
-## MCP tools
-
-| Tool | Implementation | Result |
-| --- | --- | --- |
-| `fetch_subtitles(url, lang)` | `yt-dlp --skip-download` gets author or auto captions; VTT/SRT parsing strips timestamps and adjacent repeated lines | Plain text from the selected subtitle track. Defaults to English. |
-| `fetch_page(url)` | `httpx` fetches a transcript page; an HTML parser keeps block boundaries while removing markup | Plain text for the tutor to verify against the requested episode. |
-
-The tools use stdio MCP through a small provider-neutral schema bridge. The
-server does not download video or transcribe audio. It needs an available
-subtitle track or transcript page. It clips oversized responses and returns
-tool errors as text that an agent can handle.
-
-```text
-Video URL / transcript page
-    -> transcript MCP (fetch_subtitles / fetch_page)
-    -> verify the requested content
-    -> select 12-20 real expressions
-    -> pre-viewing Telegram note in the private application
-    -> learner feedback -> spaced repetition
+```mermaid
+flowchart LR
+    A[Telegram or scheduled loop] --> B[run_session harness]
+    B --> C[Bounded Markdown context]
+    B --> D[Codex runtime / App Server]
+    D --> E[stdio MCP tools]
+    E --> F[Telegram / Google / SRS / transcripts]
+    B --> G[Validated state edits]
+    B --> H[JSONL and OpenTelemetry traces]
 ```
 
-## Run locally
+- `src/tutor/bot.py`, `cards_bot.py`, and `loop.py` are the user and schedule
+  entry points. They meet in `harness.run_session()`.
+- `src/tutor/context.py` builds a bounded view of canonical Markdown state.
+  Sessions are stateless; durable progress lives in `tutors/<subject>/`.
+- `src/tutor/runtime.py` hosts the Codex runtime behind an `AgentRuntime`
+  boundary. External capabilities are exposed through stdio MCP, with tool
+  schemas kept separate from provider-specific SDK code.
+- `src/tutor/structured.py` validates structured decisions and state edits.
+  JSONL and OpenTelemetry/Arize Phoenix support debugging.
+- `src/tutor/srs.py` and `tts.py` provide FSRS/SQLite repetition and local
+  Kokoro ONNX speech for the English tutor.
 
-Python 3.11+ and `uv` are required. Install dependencies and start the MCP
-server from this repository:
+## English-content subtitle MCP
+
+The English tutor can prepare a short list of expressions **before** the
+learner watches a video. `src/tutor/tools/transcript.py` exposes two MCP tools:
+
+| Tool | What it does |
+| --- | --- |
+| `fetch_subtitles(url, lang)` | Uses `yt-dlp --skip-download` for available human or auto captions. It extracts text from VTT/SRT, dropping timestamps, markup, and adjacent repeated lines. |
+| `fetch_page(url)` | Fetches a transcript web page with `httpx` and keeps block boundaries while removing HTML. |
+
+The `episode` prompt checks that the text belongs to the selected video or
+episode, then chooses a small set of expressions to notice while watching.
+**No verified transcript means no list.** The tool does not download video or
+transcribe audio when captions are unavailable. The public prompt is generic;
+no learner-specific examples or copyrighted transcripts are bundled.
+
+## Repository layout
+
+| Path | Contents |
+| --- | --- |
+| `src/tutor/` | Full agent implementation and MCP integrations |
+| `prompts/` | General and subject-specific instructions |
+| `templates/` | Empty interview and English learner state templates |
+| `scripts/init_state.py` | Creates a local `tutors/` directory from templates |
+| `deploy/` | Dockerfile, schedule, and a Compose example for one trusted learner |
+
+## Local setup
+
+Python 3.11+, `uv`, Telegram bot tokens, and a separately authenticated
+product `CODEX_HOME` are needed for a real session. Google tools also require
+the user's own OAuth setup. Use an isolated environment and never commit
+`.env`, `token.json`, `tutors/`, `logs/`, or `CODEX_HOME`.
 
 ```bash
-uv sync
-uv run tutor-subtitles-mcp
+uv sync --frozen
+python scripts/init_state.py --learner-name "Your name"
+cp .env.example .env
+# Fill in your own Telegram tokens and chat ID; authenticate Codex separately.
+uv run python -m tutor.bot --tutor english
 ```
 
-The command speaks MCP over stdin/stdout and waits for an MCP client. For a
-client that accepts a command and arguments, use the repository's virtualenv:
+The transcript MCP can be inspected without starting a bot:
 
-```json
-{
-  "command": "/absolute/path/to/tutor-public/.venv/bin/python",
-  "args": ["-m", "tutor_public.server"]
-}
+```bash
+uv run python -m tutor.mcp_stdio --server transcript --tutor english
 ```
 
-Keep the server local and pass only video or page URLs you trust. It accepts
-HTTP(S) URLs and is not hardened as a public web-fetch service. No model API key
-is needed for the MCP server itself; an agent client is needed to use the tools.
+The MCP command waits for a client on stdin/stdout. `deploy/compose.example.yaml`
+is a reference, not a safe configuration for accepting untrusted public users:
+it uses host networking and mounts credentials from the local machine. Review
+its paths, timezone, and isolation before any deployment. This code does not
+switch the project to separately billed OpenAI API access.
 
-## Scope of this public version
+## Public snapshot limits
 
-The published code includes the transcript MCP, a generic episode prompt, and
-packaging to run the server. The full Tutor runtime, personal Markdown memory,
-Google/Telegram credentials, SRS store, and production deployment remain
-private. This is a focused implementation sample, not a hosted tutoring app.
+This export is based on the last committed single-user agent implementation.
+Uncommitted multi-user isolation work in the private project is not part of the
+public repository. A real end-to-end session needs the reader's own accounts,
+state, content, and model authorization; none were invoked while preparing this
+public snapshot.
