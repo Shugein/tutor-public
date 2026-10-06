@@ -1,0 +1,18 @@
+[project]
+name = "tutor-public"
+version = "0.1.0"
+description = "Public transcript MCP slice of a personal AI tutor"
+requires-python = ">=3.11"
+dependencies = [
+    "anyio>=4.0,<5.0",
+    "httpx>=0.28,<1.0",
+    "mcp>=1.28,<2.0",
+    "yt-dlp>=2026.7.4",
+]
+
+[project.scripts]
+tutor-subtitles-mcp = "tutor_public.server:main"
+
+[build-system]
+requires = ["uv_build>=0.12.0,<0.13.0"]
+build-backend = "uv_build"
